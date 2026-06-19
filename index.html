@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Picker Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root { --primary: #2563eb; --bg: #f8fafc; --success: #10b981; --danger: #ef4444; }
+        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; background: var(--bg); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        .header { background: white; padding: 10px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 100; }
+        .main-content { display: flex; flex: 1; overflow: hidden; padding: 15px; gap: 15px; }
+        
+        /* Cột trái */
+        .side-panel { width: 350px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding-right: 5px; }
+        
+        /* Các khối chức năng */
+        .step-box { background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 10px; }
+        .step-title { font-size: 13px; font-weight: bold; color: var(--primary); text-transform: uppercase; margin-bottom: 5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
+        
+        .upload-box { border: 2px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 15px 10px; cursor: pointer; transition: 0.2s; }
+        .upload-box:hover { border-color: var(--primary); background: #f0fdf4; }
+        input[type="file"] { max-width: 100%; font-size: 12px; cursor: pointer; margin-top: 5px; }
+
+        select { padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; width: 100%; box-sizing: border-box; cursor: pointer; }
+        select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+        select:disabled { background: #f1f5f9; cursor: not-allowed; }
+
+        #result-box { padding: 12px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; font-weight: bold; min-height: 60px; word-break: break-all; font-size: 14px; color: #92400e; overflow-y: auto; max-height: 120px; }
+
+        /* Cột phải */
+        .view-panel { flex: 1; background: white; border-radius: 12px; display: flex; flex-direction: column; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
+        .gallery-header { padding: 10px 15px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; border-radius: 12px 12px 0 0; }
+        .gallery { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; padding: 20px; align-content: start; }
+
+        /* Card ảnh */
+        .img-card { border: 2px solid #f1f5f9; border-radius: 12px; cursor: pointer; transition: 0.2s; position: relative; background: white; padding: 8px; }
+        .img-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+        .img-card img { width: 100%; height: 220px; object-fit: contain; border-radius: 8px; display: block; background: #f8fafc; }
+        .img-card p { margin: 8px 0 0; font-size: 13px; text-align: center; color: #1e293b; font-weight: 700; word-break: break-all; }
+        
+        .img-card.selected { border-color: var(--success); background: #f0fdf4; border-width: 3px; }
+        .img-card.selected::after { content: "✓"; position: absolute; top: 10px; right: 10px; background: var(--success); color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+
+        /* Card ảnh - Trạng thái INACTIVE */
+        .img-card.inactive { opacity: 0.65; background: #fef2f2; border-color: #fee2e2; }
+        .img-card.inactive img { filter: grayscale(40%); }
+        .inactive-badge { position: absolute; top: 8px; left: 8px; background: var(--danger); color: white; font-size: 10px; padding: 4px 6px; border-radius: 4px; font-weight: bold; z-index: 10; box-shadow: 0 1px 3px rgba(0,0,0,0.2); letter-spacing: 0.5px; }
+
+        /* Nút bấm */
+        .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; position: relative; }
+        .btn { padding: 10px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; font-size: 12px; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .btn-success { background: var(--success); color: white; grid-column: span 2; font-size: 14px; padding: 12px;}
+        .btn-outline { background: white; border: 1px solid #cbd5e1; color: #475569; }
+        .btn-danger { background: #fee2e2; color: var(--danger); border: 1px solid #fecaca; }
+
+        #copy-toast { position: absolute; top: -30px; right: 0; background: var(--success); color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+        .opt-box { font-size: 12px; color: #64748b; font-weight: 500; }
+        input#resizeParam { padding: 5px; border: 1px solid #cbd5e1; border-radius: 6px; width: 160px; font-weight: bold; color: var(--primary); }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div style="display: flex; justify-content: space-between; align-items: center; max-width: 1600px; margin: auto;">
+        <h3 style="margin:0; color: #1e293b;">🖼️ Image Picker Pro</h3>
+        <div class="opt-box">
+            Nén ảnh: <input type="text" id="resizeParam" value="resize-h400^compr-r80">
+        </div>
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="side-panel">
+        
+        <div class="step-box">
+            <div class="step-title">Bước 1: Nạp File Excel</div>
+            <div class="upload-box" id="dropZone">
+                <span style="font-size: 13px; font-weight: bold; color: #475569;">📁 Chọn file Excel</span>
+                <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
+            </div>
+            <span id="fileStatus" style="font-size: 12px; color: var(--success); font-weight: bold; display: none;">✓ Đã nạp dữ liệu xong!</span>
+        </div>
+
+        <div class="step-box">
+            <div class="step-title">Bước 2: Chọn Option & Lọc</div>
+            <label style="font-size: 12px; font-weight: 600;">Chọn SKU (Wayfair Listing):</label>
+            <select id="skuSelect" disabled>
+                <option value="">-- Vui lòng nạp file trước --</option>
+            </select>
+            
+            <label style="font-size: 12px; font-weight: 600; margin-top: 5px;">Chọn Option (Part Number):</label>
+            <select id="partSelect" disabled>
+                <option value="">-- Vui lòng chọn SKU trước --</option>
+            </select>
+
+            <label style="font-size: 12px; font-weight: 600; margin-top: 5px;">Lọc Trạng Thái Ảnh:</label>
+            <select id="statusFilter" disabled>
+                <option value="all">👁️ See All</option>
+                <option value="active">✅ Active Images Only</option>
+                <option value="inactive">❌ Inactive Images Only</option>
+            </select>
+        </div>
+
+        <div class="step-box" style="flex: 1;">
+            <div class="step-title">Kết Quả Đã Chọn</div>
+            <div id="result-box">Trống...</div>
+
+            <div class="btn-group" style="margin-top: 10px;">
+                <div id="copy-toast">Đã copy tự động!</div>
+                <button class="btn btn-success" onclick="copyToClipboard()">📋 COPY DANH SÁCH IRE_ID</button>
+                <button class="btn btn-outline" onclick="clearSelectionOnly()">✨ BỎ CHỌN</button>
+                <button class="btn btn-danger" onclick="clearAll()">🗑️ RESET DATA</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="view-panel">
+        <div class="gallery-header">
+            <span id="statusText" style="font-size: 13px; font-weight: 600; color: #475569;">Đang chờ dữ liệu...</span>
+            <span id="countText" style="font-size: 12px; color: #64748b;"></span>
+        </div>
+        <div id="gallery" class="gallery"></div>
+    </div>
+</div>
+
+<script>
+    let globalData = [];
+    let selectedIDs = new Set();
+
+    // Nạp file Excel
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const statusText = document.getElementById('statusText');
+        statusText.innerText = "Đang phân tích file Excel...";
+        document.getElementById('fileStatus').style.display = "none";
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, {header: 1, defval: ""});
+                
+                if (jsonData.length < 7) {
+                    alert("File không đúng cấu trúc (Dữ liệu phải bắt đầu từ dòng 7).");
+                    statusText.innerText = "Lỗi cấu trúc file.";
+                    return;
+                }
+
+                const headers = jsonData[3].map(h => h.toString().toLowerCase().trim());
+                
+                const colWayfairListing = headers.findIndex(h => h.includes("wayfair listing"));
+                const colPartNumber = headers.findIndex(h => h.includes("manufacturer part number"));
+                const colAssetIdType = headers.findIndex(h => h.includes("asset id type"));
+                const colAssetId = headers.findIndex(h => h === "asset id"); 
+                const colAssetUrl = headers.findIndex(h => h === "asset url" || h.includes("asset url"));
+                const colActive = headers.findIndex(h => h === "active");
+
+                if (colWayfairListing === -1 || colPartNumber === -1 || colAssetIdType === -1 || colAssetId === -1 || colAssetUrl === -1) {
+                    alert("Không tìm thấy đủ các cột yêu cầu ở dòng số 4 của file Excel.\nVui lòng kiểm tra lại file.");
+                    statusText.innerText = "Thiếu cột dữ liệu.";
+                    return;
+                }
+
+                globalData = [];
+                const uniqueSKUs = new Set();
+
+                for (let i = 6; i < jsonData.length; i++) {
+                    const row = jsonData[i];
+                    if (!row || row.length === 0) continue;
+
+                    const sku = row[colWayfairListing].toString().trim();
+                    const partNumber = row[colPartNumber].toString().trim();
+                    const assetIdType = row[colAssetIdType].toString().trim();
+                    const assetId = row[colAssetId].toString().trim();
+                    const assetUrl = row[colAssetUrl].toString().trim();
+                    const activeStatus = (colActive !== -1 && row[colActive] !== undefined) ? row[colActive].toString().trim() : "";
+
+                    if (sku) {
+                        uniqueSKUs.add(sku);
+                    }
+
+                    globalData.push({ sku, partNumber, assetIdType, assetId, assetUrl, activeStatus });
+                }
+
+                const skuSelect = document.getElementById('skuSelect');
+                skuSelect.innerHTML = '<option value="">-- Chọn SKU (Wayfair Listing) --</option>';
+                uniqueSKUs.forEach(sku => {
+                    const opt = document.createElement('option');
+                    opt.value = sku;
+                    opt.textContent = sku;
+                    skuSelect.appendChild(opt);
+                });
+
+                skuSelect.disabled = false;
+                
+                const partSelect = document.getElementById('partSelect');
+                partSelect.innerHTML = '<option value="">-- Vui lòng chọn SKU trước --</option>';
+                partSelect.disabled = true;
+
+                document.getElementById('statusFilter').disabled = true;
+
+                document.getElementById('fileStatus').style.display = "block";
+                statusText.innerText = `Nạp thành công! Đã tìm thấy ${uniqueSKUs.size} SKU. Vui lòng chọn SKU.`;
+
+            } catch (error) {
+                console.error(error);
+                alert("Đã xảy ra lỗi khi đọc file Excel.");
+                statusText.innerText = "Lỗi đọc file.";
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    // Xử lý khi chọn SKU
+    document.getElementById('skuSelect').addEventListener('change', function(e) {
+        const selectedSku = e.target.value.trim().toLowerCase();
+        const partSelect = document.getElementById('partSelect');
+        const statusFilter = document.getElementById('statusFilter');
+        const gallery = document.getElementById('gallery');
+        
+        gallery.innerHTML = ''; 
+        document.getElementById('countText').innerText = '';
+        selectedIDs.clear();
+        updateResultDisplay();
+
+        if (!selectedSku) {
+            partSelect.innerHTML = '<option value="">-- Vui lòng chọn SKU trước --</option>';
+            partSelect.disabled = true;
+            statusFilter.disabled = true;
+            document.getElementById('statusText').innerText = "Vui lòng chọn SKU.";
+            return;
+        }
+
+        const matchingRows = globalData.filter(row => row.sku.toLowerCase() === selectedSku);
+        
+        const uniqueParts = new Set();
+        matchingRows.forEach(row => {
+            const partLowerCase = row.partNumber.toLowerCase();
+            if (row.partNumber !== "" && partLowerCase !== "wayfair sku") {
+                uniqueParts.add(row.partNumber);
+            }
+        });
+
+        if (uniqueParts.size > 0) {
+            partSelect.innerHTML = '<option value="">-- Chọn Option hiển thị --</option>';
+            uniqueParts.forEach(part => {
+                const opt = document.createElement('option');
+                opt.value = part;
+                opt.textContent = part;
+                partSelect.appendChild(opt);
+            });
+            partSelect.disabled = false;
+            statusFilter.disabled = false; // Bật bộ lọc trạng thái
+            document.getElementById('statusText').innerText = "Vui lòng chọn Option để xem ảnh.";
+        } else {
+            partSelect.innerHTML = '<option value="">-- Không có Option nào --</option>';
+            partSelect.disabled = true;
+            statusFilter.disabled = true;
+            document.getElementById('statusText').innerText = "Không tìm thấy Option phù hợp cho SKU này.";
+        }
+    });
+
+    // Hàm cập nhật Gallery tổng hợp (dùng cho cả khi đổi Part và đổi Filter)
+    function updateGalleryView() {
+        const selectedPart = document.getElementById('partSelect').value;
+        const selectedSku = document.getElementById('skuSelect').value.trim().toLowerCase();
+        const filterValue = document.getElementById('statusFilter').value;
+        
+        if (!selectedPart || !selectedSku) return;
+
+        const filteredImages = globalData.filter(row => {
+            // Lọc theo SKU, Part Number và Asset ID Type = IRE_ID
+            if (row.sku.toLowerCase() !== selectedSku) return false;
+            if (row.partNumber !== selectedPart) return false;
+            if (row.assetIdType !== "IRE_ID") return false;
+
+            // Lọc theo Trạng thái Active/Inactive
+            const isInactive = row.activeStatus.toLowerCase() === 'no';
+            if (filterValue === 'active' && isInactive) return false;
+            if (filterValue === 'inactive' && !isInactive) return false;
+
+            return true;
+        });
+
+        renderGallery(filteredImages);
+    }
+
+    // Gắn sự kiện cho Dropdown Option và Dropdown Lọc trạng thái
+    document.getElementById('partSelect').addEventListener('change', updateGalleryView);
+    document.getElementById('statusFilter').addEventListener('change', updateGalleryView);
+
+    function renderGallery(imagesData) {
+        const gallery = document.getElementById('gallery');
+        const statusText = document.getElementById('statusText');
+        const resizeStr = document.getElementById('resizeParam').value;
+        
+        gallery.innerHTML = '';
+        
+        // Cập nhật lại UI chọn ảnh dựa trên selectedIDs đang có
+        // Lưu ý: Không clear() selectedIDs ở đây để giữ lại các ảnh đã chọn khi đổi bộ lọc
+        
+        if (imagesData.length === 0) {
+            statusText.innerText = "Không tìm thấy ảnh IRE_ID nào khớp với bộ lọc.";
+            document.getElementById('countText').innerText = "0 ảnh";
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        let count = 0;
+
+        imagesData.forEach(item => {
+            let url = item.assetUrl;
+            let id = item.assetId;
+            let isInactive = item.activeStatus.toLowerCase() === 'no';
+
+            if (id && url) {
+                if (url.includes("assets.wfcdn.com")) {
+                    url = url.includes("/im/") 
+                        ? url.replace(/resize-[^^]+(?:\^compr-r\d+)?/, resizeStr)
+                        : url + (url.includes('?') ? '&' : '?') + "w=400&h=400&fit=bounds";
+                }
+
+                const card = document.createElement('div');
+                let className = 'img-card';
+                if (isInactive) className += ' inactive';
+                if (selectedIDs.has(id)) className += ' selected'; // Giữ trạng thái chọn
+                
+                card.className = className;
+                card.onclick = () => toggleSelect(card, id);
+                
+                let cardHtml = `<img src="${url}" loading="lazy" decoding="async" onerror="this.src='https://via.placeholder.com/200?text=Error'">`;
+                
+                if (isInactive) {
+                    cardHtml += `<div class="inactive-badge">INACTIVE</div>`;
+                }
+                
+                cardHtml += `<p>${id}</p>`;
+                card.innerHTML = cardHtml;
+                
+                fragment.appendChild(card);
+                count++;
+            }
+        });
+
+        gallery.appendChild(fragment);
+        statusText.innerText = "Đã tải xong ảnh!";
+        document.getElementById('countText').innerText = `Tổng cộng: ${count} ảnh hiển thị`;
+        
+        // Cập nhật lại text box ID phòng trường hợp có thay đổi
+        updateResultDisplay();
+    }
+
+    function toggleSelect(element, id) {
+        if (selectedIDs.has(id)) {
+            selectedIDs.delete(id);
+            element.classList.remove('selected');
+        } else {
+            selectedIDs.add(id);
+            element.classList.add('selected');
+        }
+        updateResultDisplay();
+    }
+
+    function updateResultDisplay() {
+        const resultBox = document.getElementById('result-box');
+        
+        if (selectedIDs.size === 0) {
+            resultBox.innerText = "Trống...";
+            return;
+        }
+
+        const textToCopy = Array.from(selectedIDs).join(',').replace(/\s/g, '');
+        resultBox.innerText = textToCopy;
+
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            const toast = document.getElementById('copy-toast');
+            toast.innerText = "Đã auto-copy!";
+            toast.style.opacity = "1";
+            setTimeout(() => { toast.style.opacity = "0"; }, 1500);
+        }).catch(err => console.log('Không thể auto-copy', err));
+    }
+
+    function clearSelectionOnly() {
+        selectedIDs.clear();
+        document.querySelectorAll('.img-card.selected').forEach(card => card.classList.remove('selected'));
+        updateResultDisplay();
+    }
+
+    function clearAll() {
+        if(confirm("Xóa file đã tải lên và reset lại toàn bộ?")) {
+            document.getElementById('gallery').innerHTML = '';
+            
+            document.getElementById('fileInput').value = '';
+            document.getElementById('fileStatus').style.display = "none";
+            globalData = [];
+
+            const skuSelect = document.getElementById('skuSelect');
+            skuSelect.innerHTML = '<option value="">-- Vui lòng nạp file trước --</option>';
+            skuSelect.disabled = true;
+
+            const partSelect = document.getElementById('partSelect');
+            partSelect.innerHTML = '<option value="">-- Vui lòng chọn SKU trước --</option>';
+            partSelect.disabled = true;
+
+            const statusFilter = document.getElementById('statusFilter');
+            statusFilter.value = 'all';
+            statusFilter.disabled = true;
+
+            selectedIDs.clear();
+            updateResultDisplay();
+            
+            document.getElementById('statusText').innerText = "Sẵn sàng.";
+            document.getElementById('countText').innerText = "";
+        }
+    }
+
+    function copyToClipboard() {
+        const text = document.getElementById('result-box').innerText;
+        const toast = document.getElementById('copy-toast');
+        if (selectedIDs.size === 0 || text === "Trống...") return;
+        
+        navigator.clipboard.writeText(text).then(() => {
+            toast.innerText = "Đã copy thủ công!";
+            toast.style.opacity = "1";
+            setTimeout(() => { toast.style.opacity = "0"; }, 1500);
+        });
+    }
+</script>
+
+</body>
+</html>
